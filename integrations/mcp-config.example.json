@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "defentail": {
+      "command": "python",
+      "args": ["-m", "defentail.mcp_server"],
+      "env": {
+        "DEFENTAIL_WORKSPACE": "C:\\path\\to\\your\\app"
+      }
+    }
+  }
+}

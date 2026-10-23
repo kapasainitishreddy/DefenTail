@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "syrava-defentail"
+version = "0.2.0"
+description = "Local-first security scan orchestration with transparent coverage and evidence"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Syrava"}]
+dependencies = []
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0,<3"]
+
+[project.scripts]
+defentail = "defentail.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+defentail = ["rules.yml", "data/*.json"]

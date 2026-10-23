@@ -1,0 +1,43 @@
+{
+  "schema": "defentail.incidents.v1",
+  "as_of": "2026-10-22",
+  "update_policy": "Curated defense guidance. New external advisories are NOT executable scanning rules until reviewed and tested.",
+  "incidents": [
+    {
+      "id": "CVE-2025-29927",
+      "title": "Next.js middleware authorization bypass",
+      "year": 2025,
+      "affected_area": "next-auth-server",
+      "severity": "CRITICAL",
+      "plain_english": "A locked door in the hallway could be skipped. Each private room needs its own lock too.",
+      "technical_lesson": "Enforce authorization at every protected server handler, not only at a middleware boundary; upgrade affected Next.js releases.",
+      "test_plan": "For each protected API route, test requests without a session and as a user who does not own the requested resource. Confirm server-side authorization denies both.",
+      "sources": ["https://github.com/advisories/GHSA-f82v-jwr5-mffw"],
+      "rule_links": ["DT-NEXT-MIDDLEWARE-REVIEW", "DT-NEXT-KNOWN-VERSION"]
+    },
+    {
+      "id": "CVE-2025-55182",
+      "title": "React Server Components remote code execution",
+      "year": 2025,
+      "affected_area": "react-server-dom",
+      "severity": "CRITICAL",
+      "plain_english": "A bug in a building block could let a stranger give instructions to the server.",
+      "technical_lesson": "Update vulnerable React Server Components packages and affected dependent frameworks; check lockfiles, not only manifest ranges.",
+      "test_plan": "Verify installed versions using lockfile and OSV; after upgrade run functional and server integration tests.",
+      "sources": ["https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components"],
+      "rule_links": ["DT-REACT-RSC-KNOWN-VERSION"]
+    },
+    {
+      "id": "CISA-2025-SHAI-HULUD",
+      "title": "npm Shai-Hulud supply-chain compromise",
+      "year": 2025,
+      "affected_area": "dependencies-and-build",
+      "severity": "HIGH",
+      "plain_english": "A useful building block someone downloaded was secretly changed to steal keys.",
+      "technical_lesson": "Pin and review dependencies, restrict installation scripts and build-time permissions, rotate leaked tokens, and isolate build credentials.",
+      "test_plan": "Scan lockfiles, inspect newly introduced packages and lifecycle scripts, and confirm build jobs have least-privilege credentials.",
+      "sources": ["https://content.govdelivery.com/accounts/USDHSCISA/bulletins/3f408db"],
+      "rule_links": ["DT-NPM-LIFECYCLE-REVIEW"]
+    }
+  ]
+}

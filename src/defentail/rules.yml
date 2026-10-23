@@ -1,0 +1,26 @@
+# MIT-licensed DefenTail-authored rules. Does not bundle the Semgrep Rules License registry.
+rules:
+  - id: defentail.python.shell-true
+    message: "Shell execution: review input origin; prefer arguments without shell=True."
+    severity: WARNING
+    metadata:
+      impact: MEDIUM
+      cwe: CWE-78
+    languages: [python]
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+  - id: defentail.javascript.eval
+    message: "Dynamic eval requires review; do not evaluate untrusted input."
+    severity: WARNING
+    metadata:
+      impact: MEDIUM
+      cwe: CWE-94
+    languages: [javascript, typescript]
+    pattern: eval(...)
+  - id: defentail.javascript.function-constructor
+    message: "Avoid dynamic Function construction from untrusted data."
+    severity: WARNING
+    metadata:
+      impact: MEDIUM
+      cwe: CWE-94
+    languages: [javascript, typescript]
+    pattern: new Function(...)

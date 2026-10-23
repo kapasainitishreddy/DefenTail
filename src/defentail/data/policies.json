@@ -1,0 +1,73 @@
+{
+  "schema": "defentail.policies.v1",
+  "as_of": "2026-10-22",
+  "disclaimer": "A documented checklist and evidence hints. Automated checks are not legal advice, a certification, or a guarantee of store acceptance.",
+  "policies": [
+    {
+      "id": "apple-app-review-5.1.1-i",
+      "platform": "ios",
+      "title": "Accessible and accurate privacy policy",
+      "simple": "People should know what information your app collects and what happens to it.",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "source_section": "5.1.1(i)",
+      "reviewed": "2026-10-16",
+      "evidence": ["Privacy policy URL in store metadata", "Accessible privacy policy inside app", "Verified data collection and third-party SDK inventory"],
+      "auto_verifiable": false
+    },
+    {
+      "id": "apple-app-review-5.1.1-v",
+      "platform": "ios",
+      "title": "In-app account deletion when account creation is supported",
+      "simple": "If someone can make an account, the app must give them a way to delete it.",
+      "source": "https://developer.apple.com/app-store/review/guidelines/",
+      "source_section": "5.1.1(v)",
+      "reviewed": "2026-10-16",
+      "evidence": ["Screenshots or screen recording of deletion flow", "Backend deletion verification", "Retention and deletion documentation"],
+      "auto_verifiable": false
+    },
+    {
+      "id": "play-user-data",
+      "platform": "android",
+      "title": "Data safety disclosures, consent and secure handling",
+      "simple": "Your store answers must match what the app and its SDKs really do.",
+      "source": "https://support.google.com/googleplay/android-developer/answer/18258653?hl=en",
+      "source_section": "User Data",
+      "reviewed": "2026-10-22",
+      "evidence": ["SDK and runtime data inventory", "Data safety declaration", "Prominent disclosure and consent flow", "Privacy policy URL"],
+      "auto_verifiable": false
+    },
+    {
+      "id": "play-account-deletion",
+      "platform": "android",
+      "title": "In-app and web account deletion",
+      "simple": "People need a clear way to delete their app account and associated data.",
+      "source": "https://support.google.com/googleplay/android-developer/answer/18258653?hl=en",
+      "source_section": "Account deletion",
+      "reviewed": "2026-10-22",
+      "evidence": ["Tested in-app deletion flow", "Working external deletion webpage", "Backend deletion verification"],
+      "auto_verifiable": false
+    },
+    {
+      "id": "owasp-top10-2025-a01",
+      "platform": "web",
+      "title": "Broken access control",
+      "simple": "People should not be able to open or change someone else's private information.",
+      "source": "https://top10.owasp.org/2025/",
+      "source_section": "A01:2025",
+      "reviewed": "2026-10-22",
+      "evidence": ["Authenticated route access tests", "Cross-user resource authorization tests", "Independent API security review"],
+      "auto_verifiable": false
+    },
+    {
+      "id": "owasp-top10-2025-a03",
+      "platform": "web",
+      "title": "Software supply-chain failures",
+      "simple": "Check building blocks from other people before adding them to your app.",
+      "source": "https://top10.owasp.org/2025/",
+      "source_section": "A03:2025",
+      "reviewed": "2026-10-22",
+      "evidence": ["Lockfile vulnerability scan", "Dependency changes reviewed", "Build credentials and script permissions reviewed"],
+      "auto_verifiable": false
+    }
+  ]
+}
