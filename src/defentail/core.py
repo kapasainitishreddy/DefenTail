@@ -17,6 +17,7 @@ from typing import Any
 
 SCHEMA = "defentail.scan.v0.1"
 COMPARISON_SCHEMA = "defentail.comparison.v0.1"
+GUARD_SCHEMA = "defentail.guard.v0.1"
 ENGINES = {"basic": ("builtin",), "quick": ("builtin", "semgrep", "betterleaks", "osv-scanner"), "full": ("builtin", "semgrep", "betterleaks", "osv-scanner", "trivy") }
 SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"}
 
@@ -126,10 +127,16 @@ def parse_betterleaks(data: Any, root: Path) -> list[dict[str, Any]]:
 
 
 def parse_trivy(data: Any, root: Path) -> list[dict[str, Any]]:
-    if not isinstance(data, dict) or not isinstance(data.get("Results"), list):
+    if not isinstance(data, dict):
+        raise ValueError("Invalid Trivy report")
+    # A clean scan legitimately omits Results entirely (or writes null).
+    results = data.get("Results")
+    if results is None:
+        results = []
+    if not isinstance(results, list):
         raise ValueError("Invalid Trivy report")
     findings = []
-    for group in data["Results"]:
+    for group in results:
         if not isinstance(group, dict):
             continue
         target = group.get("Target", "unknown")
@@ -149,22 +156,51 @@ def parse_trivy(data: Any, root: Path) -> list[dict[str, Any]]:
 
 
 def build_command(engine: str, root: Path, output: Path, *, rules: Path | None = None) -> list[str]:
-    """Fixed commands only. No shell evaluation and no user-provided executable paths."""
+    """Fixed commands only. No shell evaluation and no user-provided executable paths.
+
+    The executable is pinned to the path resolved by shutil.which so the binary that
+    was detected is the binary that runs. On Windows a bare name does not resolve to
+    .cmd/.bat shims at launch, which would otherwise make a detected tool unlaunchable.
+    """
+    exe = shutil.which(engine) or engine
     if engine == "semgrep":
         rule_file = (rules or Path(__file__).with_name("rules.yml")).resolve()
-        return ["semgrep", "scan", "--json", "--metrics=off", "--disable-version-check",
+        return [exe, "scan", "--json", "--metrics=off", "--disable-version-check",
                 "--config", str(rule_file), "--exclude", ".defentail",
                 "--exclude", "node_modules", "--exclude", "dist", "--output", str(output), str(root)]
     if engine == "betterleaks":
-        return ["betterleaks", "dir", str(root), "--report-path", str(output),
+        return [exe, "dir", str(root), "--report-path", str(output),
                 "--report-format", "json", "--silent"]
     if engine == "osv-scanner":
-        return ["osv-scanner", "scan", "--format", "json", "-r", str(root)]
+        return [exe, "scan", "--format", "json", "-r", str(root)]
     if engine == "trivy":
-        return ["trivy", "fs", "--format", "json", "--output", str(output),
+        return [exe, "fs", "--format", "json", "--output", str(output),
                 "--scanners", "vuln,secret,misconfig", "--skip-dirs", ".defentail",
                 str(root)]
     raise ValueError("Unknown engine")
+
+
+DEPENDENCY_MANIFESTS = frozenset({
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "requirements.txt", "poetry.lock", "Pipfile.lock", "uv.lock",
+    "go.mod", "go.sum", "Cargo.lock", "Gemfile.lock", "composer.lock",
+    "pom.xml", "gradle.lockfile", "packages.lock.json",
+})
+
+
+def has_dependency_manifest(root: Path, *, limit: int = 5000) -> bool:
+    """Cheap bounded check: is there anything a dependency scanner could read?"""
+    from .builtin import SKIP_DIRS
+    seen = 0
+    for current, dirs, files in os.walk(root, followlinks=False):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not (Path(current) / d).is_symlink()]
+        for name in files:
+            seen += 1
+            if seen > limit:
+                return True  # Too large to judge cheaply; let the scanner decide.
+            if name in DEPENDENCY_MANIFESTS:
+                return True
+    return False
 
 
 def doctor() -> list[dict[str, Any]]:
@@ -209,6 +245,11 @@ def _scanner_run(name: str, root: Path, output: Path, timeout: int) -> dict[str,
     if shutil.which(name) is None:
         return {"engine": name, "status": "unavailable", "findings": [],
                 "duration_ms": 0, "reason": "Executable not found on PATH"}
+    if name == "osv-scanner" and not has_dependency_manifest(root):
+        # OSV exits 128 with "No package sources found". There is nothing to scan here,
+        # so this is not a coverage gap and must not block the gate.
+        return {"engine": name, "status": "not-applicable", "findings": [], "duration_ms": 0,
+                "reason": "No supported dependency manifest or lockfile in this project"}
     cmd = build_command(name, root, output)
     try:
         # Deliberately never capture stdout or stderr: scanners may print secrets.
@@ -290,7 +331,8 @@ def scan(root: Path, *, profile: str = "quick", timeout: int = 180) -> dict[str,
     found.sort(key=lambda item: (item["engine"], item["path"], item["line"], item["rule_id"]))
     checks = [{k: item[k] for k in ("engine", "status", "duration_ms", "reason")} for item in results]
     # Never treat a missing, timed-out, or failed scanner as a clean scan.
-    incomplete = [r["engine"] for r in results if r["status"] != "complete"]
+    # "not-applicable" means the project has nothing for that scanner to read; it is not a gap.
+    incomplete = [r["engine"] for r in results if r["status"] not in ("complete", "not-applicable")]
     serious = [i["fingerprint"] for i in found if i["severity"] in ("CRITICAL", "HIGH")]
     # Unknown-severity findings must be triaged; otherwise a new advisory can silently pass.
     untriaged = [i["fingerprint"] for i in found if i["severity"] == "UNKNOWN"]
@@ -316,6 +358,93 @@ def scan(root: Path, *, profile: str = "quick", timeout: int = 180) -> dict[str,
         ],
     }
     return seal(result)
+
+
+def _guard_item(issue: dict[str, Any]) -> dict[str, Any]:
+    """Small, agent-friendly projection of a finding. No raw evidence or secrets."""
+    item = {
+        "severity": issue["severity"],
+        "rule_id": issue["rule_id"],
+        "path": issue["path"],
+        "line": issue["line"],
+        "title": issue["title"],
+        "fingerprint": issue["fingerprint"],
+        "why_it_matters": issue.get("simple_explanation")
+        or "This pattern is associated with a security weakness; a human should review it.",
+        "next_step": issue.get("suggested_action")
+        or "Review the finding, apply the smallest safe fix, then rerun the guard.",
+    }
+    for key in ("incident_id", "reference", "package", "package_version"):
+        if issue.get(key):
+            item[key] = issue[key]
+    if issue.get("known_exploited"):
+        item["known_exploited"] = True
+    return item
+
+
+def guard(root: Path, *, profile: str = "basic", limit: int = 8,
+          record: bool = True) -> dict[str, Any]:
+    """Compact shipping verdict for an AI agent: block, or pass for the checks that ran.
+
+    Deliberately short so a coding agent can read it without flooding its context.
+    Every verdict is written to the project's Attack Memory so a recurring issue can be
+    recognised next time instead of rediscovered.
+    """
+    if limit < 1 or limit > 50:
+        raise ValueError("limit must be 1..50")
+    report = scan(root, profile=profile)
+    blocked = report["gate"]["blocked_by"]
+    blocking = [f for f in report["findings"] if f["severity"] in ("CRITICAL", "HIGH")]
+    review = [f for f in report["findings"] if f["severity"] in ("MEDIUM", "UNKNOWN")]
+    passed = report["gate"]["passed"]
+    reasons = []
+    if blocked["incomplete_engines"]:
+        reasons.append("These checks did not complete: " + ", ".join(blocked["incomplete_engines"]))
+    if blocking:
+        reasons.append(f"{len(blocking)} high or critical finding(s) need a fix")
+    if blocked["unknown_severity_fingerprints"]:
+        reasons.append(f"{len(blocked['unknown_severity_fingerprints'])} finding(s) have unknown severity and need triage")
+    if passed:
+        summary = f"No blocking finding in the checks that ran ({len(review)} to review)."
+        instruction = "You may continue, but do not describe the app as secure. Report which checks ran."
+    else:
+        summary = "; ".join(reasons) or "The gate is blocked."
+        instruction = ("Do not report this task as complete. Fix or triage the blocking findings, "
+                       "rerun the guard, and show the result. Never bypass a check to make it pass.")
+    history: dict[str, dict[str, Any]] = {}
+    if record:
+        from .memory import history_for, record_decision, record_scan
+        history = history_for(root, [f["fingerprint"] for f in blocking + review])
+
+    def with_memory(issue: dict[str, Any]) -> dict[str, Any]:
+        item = _guard_item(issue)
+        seen = history.get(issue["fingerprint"])
+        if seen:
+            item["memory"] = {"times_seen": seen["times_seen"], "first_seen": seen["first_seen"],
+                              "reappeared": seen["reappeared"]}
+        return item
+
+    result = {
+        "schema": GUARD_SCHEMA,
+        "verdict": "PASS_SELECTED_CHECKS" if passed else "BLOCK",
+        "can_ship": passed,
+        "summary": summary,
+        "agent_instruction": instruction,
+        "blocking": [with_memory(f) for f in blocking[:limit]],
+        "needs_review": [with_memory(f) for f in review[:limit]],
+        "coverage": [{k: c[k] for k in ("engine", "status", "reason")} for c in report["checks"]],
+        "assurance": report["assurance"],
+        "profile": profile,
+        "workspace": report["workspace_name"],
+        "generated_utc": report["generated_utc"],
+        "report_digest": report["digest"],
+        "honesty": ("A pass covers only the checks in 'coverage'. Static analysis cannot prove an app is secure, "
+                    "and a finding removed from a scan is not proof it was fixed."),
+    }
+    if record:
+        record_scan(root, report)
+        record_decision(root, result["verdict"], [f["fingerprint"] for f in blocking])
+    return result
 
 
 def compare(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

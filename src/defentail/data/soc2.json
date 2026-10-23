@@ -1,0 +1,177 @@
+{
+  "schema": "defentail.soc2.v1",
+  "framework": "AICPA SOC 2 Trust Services Criteria (2017, revised 2022 points of focus)",
+  "as_of": "2026-10-22",
+  "disclaimer": "DefenTail produces technical evidence only. SOC 2 is an attestation performed by a licensed CPA firm against a defined system description; this file is not an audit opinion, not a certification, and does not cover organizational, HR, vendor, or governance controls.",
+  "criteria": [
+    {
+      "id": "CC2.1",
+      "title": "Information quality used in the system",
+      "simple": "The records you rely on should be accurate, complete and available when needed.",
+      "support": "partial",
+      "coverage_engines": ["builtin"],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [
+        "Timestamped scan reports with a SHA-256 integrity digest",
+        "Append-only memory ledger of scans and release decisions"
+      ],
+      "human_evidence": [
+        "Data quality and review procedures",
+        "Evidence that reports were actually reviewed before release"
+      ]
+    },
+    {
+      "id": "CC3.2",
+      "title": "Risk identification and analysis",
+      "simple": "You should know what could go wrong and how likely it is.",
+      "support": "partial",
+      "coverage_engines": ["builtin"],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [
+        "Curated lessons from verified incidents mapped to checks",
+        "Recurring-finding history showing where problems concentrate"
+      ],
+      "human_evidence": [
+        "Documented risk assessment and risk register",
+        "Management review and acceptance of residual risk"
+      ]
+    },
+    {
+      "id": "CC4.1",
+      "title": "Monitoring activities",
+      "simple": "Someone should be watching for problems on a schedule, not once.",
+      "support": "strong",
+      "coverage_engines": ["builtin"],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [
+        "Per-run coverage record of which checks ran and which did not",
+        "Memory ledger with first-seen, last-seen and recurrence per finding"
+      ],
+      "human_evidence": [
+        "Monitoring schedule and ownership",
+        "Escalation and remediation records"
+      ]
+    },
+    {
+      "id": "CC6.1",
+      "title": "Logical access and credential protection",
+      "simple": "Only the right people should get in, and keys must not lie around in code.",
+      "support": "partial",
+      "coverage_engines": ["builtin"],
+      "finding_engines": ["betterleaks", "trivy"],
+      "rule_prefixes": ["DT-PRIVATE-KEY", "DT-AWS-KEY"],
+      "defentail_evidence": [
+        "Secret and private-key exposure findings with values redacted",
+        "Confirmation of whether a secret scanner actually ran"
+      ],
+      "human_evidence": [
+        "Access reviews for production systems",
+        "Key rotation records and secret-manager configuration",
+        "Authorization tests for every protected route"
+      ]
+    },
+    {
+      "id": "CC6.7",
+      "title": "Protection of data in transmission",
+      "simple": "Data travelling over the network must be encrypted and verified.",
+      "support": "partial",
+      "coverage_engines": ["builtin"],
+      "finding_engines": ["trivy"],
+      "rule_prefixes": ["DT-TLS"],
+      "defentail_evidence": [
+        "Detection of disabled TLS certificate verification in application code",
+        "Configuration findings reported by an installed configuration scanner"
+      ],
+      "human_evidence": [
+        "TLS configuration review for each deployed endpoint",
+        "Certificate lifecycle and renewal records"
+      ]
+    },
+    {
+      "id": "CC7.1",
+      "title": "Detection of vulnerabilities and misconfigurations",
+      "simple": "Known weak spots in your code and building blocks should be found before attackers do.",
+      "support": "strong",
+      "coverage_engines": ["builtin", "semgrep", "osv-scanner", "trivy"],
+      "finding_engines": ["semgrep", "osv-scanner", "trivy", "betterleaks"],
+      "rule_prefixes": ["DT-NEXT", "DT-REACT", "DT-NPM", "DT-PY-SHELL"],
+      "defentail_evidence": [
+        "Static analysis, dependency-advisory and secret scan results",
+        "Which engines were unavailable, reported instead of silently passed",
+        "Known-exploited-vulnerability enrichment when the CISA feed is present"
+      ],
+      "human_evidence": [
+        "Vulnerability management policy and remediation SLAs",
+        "Penetration test or independent assessment reports"
+      ]
+    },
+    {
+      "id": "CC7.2",
+      "title": "Monitoring for anomalies",
+      "simple": "Unusual activity should be noticed while it is happening.",
+      "support": "partial",
+      "coverage_engines": ["builtin"],
+      "finding_engines": ["betterleaks", "trivy"],
+      "rule_prefixes": [],
+      "defentail_evidence": [
+        "Change-time scanning through the watcher or agent guard",
+        "New-finding comparison between two points in time"
+      ],
+      "human_evidence": [
+        "Runtime logging, alerting and on-call procedures",
+        "Incident response records"
+      ]
+    },
+    {
+      "id": "CC8.1",
+      "title": "Change management",
+      "simple": "Changes should be reviewed, tested and approved before they reach users.",
+      "support": "strong",
+      "coverage_engines": ["builtin"],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [
+        "Before/after comparison of findings across a change",
+        "Guard verdicts recorded per change in the memory ledger",
+        "Explicit blockers instead of an unqualified pass"
+      ],
+      "human_evidence": [
+        "Code review and approval records",
+        "Test results and deployment authorization",
+        "Segregation of duties for production changes"
+      ]
+    },
+    {
+      "id": "A1.2",
+      "title": "Availability and recovery",
+      "simple": "The service should keep working and recover if something breaks.",
+      "support": "none",
+      "coverage_engines": [],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [],
+      "human_evidence": [
+        "Capacity monitoring and backup verification",
+        "Disaster recovery tests and restore evidence"
+      ]
+    },
+    {
+      "id": "P1.1",
+      "title": "Privacy notice and consent",
+      "simple": "People should be told what you collect and agree to it.",
+      "support": "none",
+      "coverage_engines": [],
+      "finding_engines": [],
+      "rule_prefixes": [],
+      "defentail_evidence": [],
+      "human_evidence": [
+        "Published privacy notice and consent flows",
+        "Data subject request handling records",
+        "Data inventory and retention schedule"
+      ]
+    }
+  ]
+}

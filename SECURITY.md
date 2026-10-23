@@ -4,12 +4,13 @@ DefenTail is a *local* scanner coordinator. The trust boundary is the supplied p
 
 ## Safe behavior we aim to enforce
 
-- All external commands use `shell=False` with fixed executable names and fixed arguments.
+- All external commands use `shell=False` with fixed arguments; the executable is pinned to the path `shutil.which()` resolved, or not run at all.
 - The built-in scanner reads source text, lockfiles and manifests without executing their contents.
-- The optional MCP server is restricted to a single `DEFENTAIL_WORKSPACE` root. It does not expose shell access or arbitrary filesystem traversal tools.
-- The local browser binds to 127.0.0.1, validates the Host and Origin where available, uses a CSRF token for POST, escapes all HTML, and does not serve project files.
+- The optional MCP server scans the folder it was launched in, or a single pinned `DEFENTAIL_WORKSPACE`; it refuses a filesystem root and does not expose shell access or arbitrary filesystem traversal tools.
+- The local browser binds to 127.0.0.1, rejects a foreign Host or Origin, requires a CSRF token for POST, escapes all HTML, renders only http(s) links, and does not serve project files.
 - Reports omit raw secret match strings and contain a SHA256 integrity digest, **not a cryptographic attestation signature**.
-- An unavailable scanner, unexpected output, or timed-out check must fail the selected security gate closed.
+- The plugin installer edits only its own keys and files, backs up a config before changing it, refuses symlinked targets, and never rewrites a config it cannot parse.
+- An unavailable scanner, unexpected output, or timed-out check must fail the selected security gate closed. A scanner with genuinely no input (no dependency manifest) is recorded as `not-applicable`, not passed and not failed.
 - Remote incident feeds are treated only as untrusted data, not as shell instructions or code.
 
 ## Threats and remaining gaps
@@ -22,3 +23,7 @@ DefenTail is a *local* scanner coordinator. The trust boundary is the supplied p
 - A successful scan says only that selected checks completed; it does not prove protection from attacks or meet regulatory compliance.
 
 To report a vulnerability in a future public repository, use a private security advisory rather than posting exploit details publicly.
+
+## Audit history
+
+- **2026-10-22** — internal deep audit of 0.3.0: live UI probes, MCP session, dogfood scan. Two high-severity correctness defects fixed (clean Trivy report graded as failure; OSV blocking dependency-free projects), plus four hardening changes. Full report: [SECURITY_AUDIT.md](SECURITY_AUDIT.md).

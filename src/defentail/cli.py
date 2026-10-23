@@ -7,8 +7,12 @@ import sys
 import time
 from pathlib import Path
 
-from .core import compare, doctor, read_report, scan, write_report
+from .compliance import soc2_evidence
+from .core import compare, doctor, guard, read_report, scan, write_report
 from .intelligence import bundled_data, kev_status, update_kev
+from .memory import record_scan
+from .memory import summary as memory_summary
+from .plugin import AGENTS, detect_agents, install, uninstall
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +25,31 @@ def main(argv: list[str] | None = None) -> int:
     scan_cmd.add_argument("--timeout", type=int, default=180)
     scan_cmd.add_argument("--output", type=Path, help="Save a machine-readable JSON evidence report")
     scan_cmd.add_argument("--json", action="store_true", help="Print JSON report, not a human summary")
+    guard_cmd = sub.add_parser("guard", help="Short shipping verdict for an AI agent (block or pass)")
+    guard_cmd.add_argument("--path", type=Path, default=Path.cwd())
+    guard_cmd.add_argument("--profile", choices=["basic", "quick", "full"], default="basic")
+    guard_cmd.add_argument("--json", action="store_true", help="Print the compact JSON verdict")
+    install_cmd = sub.add_parser("install", help="Install DefenTail as a plugin for every AI coding agent")
+    install_cmd.add_argument("--path", type=Path, default=Path.cwd(), help="Project folder the plugin should protect")
+    install_cmd.add_argument("--target", default="all",
+                             help="all, or a comma-separated list: " + ",".join(AGENTS))
+    install_cmd.add_argument("--no-project-files", action="store_true",
+                             help="Only edit user-level agent configs, write nothing into the project")
+    install_cmd.add_argument("--dry-run", action="store_true", help="Show what would change without writing")
+    install_cmd.add_argument("--json", action="store_true")
+    uninstall_cmd = sub.add_parser("uninstall", help="Remove the DefenTail plugin entries")
+    uninstall_cmd.add_argument("--path", type=Path, default=Path.cwd())
+    uninstall_cmd.add_argument("--target", default="all")
+    uninstall_cmd.add_argument("--dry-run", action="store_true")
+    sub.add_parser("agents", help="Show which AI agents were detected on this computer")
+    memory_cmd = sub.add_parser("memory", help="Show this project's Attack Memory: scans, decisions, recurring findings")
+    memory_cmd.add_argument("--path", type=Path, default=Path.cwd())
+    memory_cmd.add_argument("--json", action="store_true")
+    soc2_cmd = sub.add_parser("soc2", help="Build SOC 2 technical evidence for this project (not an audit)")
+    soc2_cmd.add_argument("--path", type=Path, default=Path.cwd())
+    soc2_cmd.add_argument("--profile", choices=["basic", "quick", "full"], default="basic")
+    soc2_cmd.add_argument("--output", type=Path, help="Write the evidence pack JSON here")
+    soc2_cmd.add_argument("--json", action="store_true")
     ui_cmd = sub.add_parser("ui", help="Start the private beginner-friendly browser UI")
     ui_cmd.add_argument("--path", type=Path, default=Path.cwd())
     ui_cmd.add_argument("--port", type=int, default=0)
@@ -47,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "scan":
             result = scan(args.path, profile=args.profile, timeout=args.timeout)
+            record_scan(args.path, result)
             if args.output:
                 write_report(args.output, result)
                 if not args.json:
@@ -70,6 +100,82 @@ def main(argv: list[str] | None = None) -> int:
                               if k not in {"still_present", "removed_from_scan", "new_in_scan"}}, indent=2))
             print(f"Removed from scan: {len(result['removed_from_scan'])}; New: {len(result['new_in_scan'])}")
             return 0 if not result["new_in_scan"] and bool(result["comparable_engines"]) else 2
+        if args.command == "guard":
+            result = guard(args.path, profile=args.profile)
+            if args.json:
+                print(json.dumps(result, indent=2))
+                return 0 if result["can_ship"] else 2
+            print(f"Verdict: {result['verdict']} - {result['summary']}")
+            for item in result["blocking"]:
+                print(f"  [{item['severity']}] {item['path']}:{item['line']} {item['title']}")
+                print(f"    Why it matters: {item['why_it_matters']}")
+                print(f"    Next step: {item['next_step']}")
+            print("Coverage: " + ", ".join(f"{c['engine']}={c['status']}" for c in result["coverage"]))
+            print(result["honesty"])
+            return 0 if result["can_ship"] else 2
+        if args.command == "install":
+            report = install(args.path, targets=args.target, project_files=not args.no_project_files,
+                             dry_run=args.dry_run)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            else:
+                print(f"Workspace: {report['workspace']}" + (" (dry run, nothing written)" if report["dry_run"] else ""))
+                for action in report["actions"]:
+                    label = action.get("label", action["target"])
+                    print(f"  [{action['outcome']}] {label} -> {action['path']}")
+                print(f"Changed: {report['changed']}")
+                for warning in report.get("warnings", []):
+                    print(f"  ! {warning}")
+                for step in report["next_steps"]:
+                    print(f"  - {step}")
+            return 0
+        if args.command == "uninstall":
+            report = uninstall(args.path, targets=args.target, dry_run=args.dry_run)
+            for action in report["actions"]:
+                print(f"  [{action['outcome']}] {action.get('label', action['target'])} -> {action['path']}")
+            return 0
+        if args.command == "memory":
+            data = memory_summary(args.path)
+            if args.json:
+                print(json.dumps(data, indent=2))
+                return 0
+            print(f"Memory file: {data['memory_file']}")
+            print(f"Scans: {data['scans']} | Decisions: {data['decisions']} "
+                  f"({data['blocked_decisions']} blocked, {data['passed_decisions']} passed)")
+            if not data["recurring_findings"]:
+                print("No recurring finding yet. Memory fills up as scans run.")
+            for item in data["recurring_findings"]:
+                mark = " returned after being clear;" if item.get("reappeared") else ""
+                print(f"  [{item.get('severity')}] {item.get('path')}:{item.get('line')} "
+                      f"{item.get('rule_id')} seen {item['times_seen']}x{mark}")
+            print(data["note"])
+            return 0
+        if args.command == "soc2":
+            pack = soc2_evidence(args.path, profile=args.profile)
+            if args.output:
+                write_report(args.output, pack)
+            if args.json:
+                print(json.dumps(pack, indent=2))
+                return 0
+            counts = pack["control_summary"]
+            print(f"SOC 2 technical evidence for {pack['scope']['workspace_name']} ({args.profile})")
+            for status, count in counts.items():
+                print(f"  {status:32} {count}")
+            for criterion in pack["criteria"]:
+                print(f"  {criterion['id']:6} {criterion['title'][:42]:44} {criterion['status']}")
+            print(f"Gaps recorded: {len(pack['gaps'])}")
+            if args.output:
+                print(f"Evidence pack saved: {args.output}")
+            print("Technical evidence only. This is not an audit opinion or a SOC 2 certification.")
+            return 0
+        if args.command == "agents":
+            home = Path.home()
+            detected = detect_agents(home)
+            for name, spec in AGENTS.items():
+                state = "detected" if detected[name] else "not found"
+                print(f"{state:10} {spec['label']:32} {home / spec['path']}")
+            print("\nInstall for all detected agents: defentail install --path .")
+            return 0
         if args.command == "ui":
             from .ui import serve
             if not 0 <= args.port <= 65535:

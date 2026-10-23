@@ -1,14 +1,16 @@
 import json
 import os
+import sys
 import textwrap
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from defentail.core import scan, compare, parse_betterleaks, parse_semgrep, parse_osv, parse_trivy, digest_valid
+from defentail.core import (scan, compare, parse_betterleaks, parse_semgrep, parse_osv, parse_trivy,
+                            digest_valid, has_dependency_manifest, _scanner_run)
 from defentail.intelligence import bundled_data, _validate_kev, update_kev, KEV_URL, KEV_MIRROR
-from defentail.ui import render_page
+from defentail.ui import render_page, safe_link
 
 
 class DefenTailTests(unittest.TestCase):
@@ -106,6 +108,41 @@ class DefenTailTests(unittest.TestCase):
             self.assertEqual(len(entries), 1)
             self.assertNotIn('TOKEN-WOULD-BE-HERE', json.dumps(entries))
 
+    def test_clean_trivy_report_is_not_a_failure(self):
+        """Trivy omits Results entirely when it finds nothing; that must parse as zero findings."""
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(parse_trivy({'SchemaVersion': 2}, Path(folder)), [])
+            self.assertEqual(parse_trivy({'Results': None}, Path(folder)), [])
+            with self.assertRaises(ValueError):
+                parse_trivy({'Results': 'not-a-list'}, Path(folder))
+
+    def test_dependency_free_project_is_not_a_coverage_gap(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.assertFalse(has_dependency_manifest(root))
+            with patch('defentail.core.shutil.which', return_value='/fake/osv-scanner'):
+                result = _scanner_run('osv-scanner', root, root / 'out.json', 5)
+            self.assertEqual(result['status'], 'not-applicable')
+            self.assertEqual(result['findings'], [])
+            (root / 'requirements.txt').write_text('requests==2.32.5\n')
+            self.assertTrue(has_dependency_manifest(root))
+
+    def test_not_applicable_engine_does_not_block_the_gate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            statuses = {'builtin': 'complete', 'semgrep': 'complete', 'betterleaks': 'complete',
+                        'osv-scanner': 'not-applicable', 'trivy': 'complete'}
+            def fake_run(name, *_args, **_kwargs):
+                return {'engine': name, 'status': statuses[name], 'findings': [],
+                        'duration_ms': 0, 'reason': ''}
+            with patch('defentail.builtin.builtin_scan',
+                       return_value={'engine': 'builtin', 'status': 'complete', 'findings': [],
+                                     'duration_ms': 0, 'reason': ''}):
+                with patch('defentail.core._scanner_run', side_effect=fake_run):
+                    result = scan(root, profile='full')
+            self.assertNotIn('osv-scanner', result['gate']['blocked_by']['incomplete_engines'])
+            self.assertTrue(result['gate']['passed'])
+
     def test_invalid_cisa_feed_rejected(self):
         with self.assertRaises(ValueError):
             _validate_kev({'vulnerabilities':[{'cveID':'bad'}]})
@@ -116,6 +153,8 @@ class DefenTailTests(unittest.TestCase):
             root = Path(folder)
             bindir = root / 'mock-bin'
             bindir.mkdir()
+            # A manifest must exist or OSV-Scanner is correctly skipped as not-applicable.
+            (root / 'requirements.txt').write_text('requests==2.32.5\n', encoding='utf-8')
             # These mocks use documented JSON shapes; they are not a live scanner validation.
             tool_outputs = {
                 'semgrep': {'results': []},
@@ -136,8 +175,17 @@ else:
     with open(args[args.index(flag) + 1], 'w', encoding='utf-8') as fh:
         json.dump(payload, fh)
 """ .replace('PAYLOAD', repr(payload))
-                stub.write_text(code, encoding='utf-8')
-                stub.chmod(0o755)
+                if os.name == 'nt':
+                    # Windows cannot execute an extensionless shebang script; use a .cmd shim
+                    # so the same subprocess orchestration path is exercised there too.
+                    stub = bindir / f'{name}.py'
+                    stub.write_text(code, encoding='utf-8')
+                    (bindir / f'{name}.cmd').write_text(
+                        f'@echo off\n"{sys.executable}" "%~dp0{stub.name}" %*\n', encoding='utf-8')
+                else:
+                    stub = bindir / name
+                    stub.write_text(code, encoding='utf-8')
+                    stub.chmod(0o755)
             with patch.dict(os.environ, {'PATH': str(bindir) + os.pathsep + os.environ.get('PATH','')}):
                 result = scan(root, profile='full')
             self.assertEqual(len(result['checks']), 5)
@@ -164,6 +212,34 @@ else:
                     result = update_kev()
                 self.assertEqual(result['record_count'], 1)
                 self.assertEqual(result['status'], 'fresh')
+
+    def test_untrusted_feed_redirect_is_rejected(self):
+        class Response:
+            def __init__(self, content, url):
+                self.content, self.url = content, url
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self, _limit):
+                return self.content
+            def geturl(self):
+                return self.url
+        with tempfile.TemporaryDirectory() as folder:
+            content = json.dumps({'vulnerabilities': [{'cveID': 'CVE-2025-9999'}]}).encode()
+            with patch.dict(os.environ, {'DEFENTAIL_DATA_HOME': folder}):
+                with patch('defentail.intelligence.urllib.request.urlopen', side_effect=[
+                    Response(content, 'https://evil.example/kev.json'),
+                    Response(content, KEV_MIRROR)]):
+                    result = update_kev()
+            self.assertEqual(result['record_count'], 1)
+
+    def test_ui_only_links_to_real_schemes(self):
+        self.assertEqual(safe_link('javascript:alert(1)'), '')
+        self.assertEqual(safe_link('data:text/html,<b>x</b>'), '')
+        self.assertIn('https://developer.apple.com', safe_link('https://developer.apple.com/x'))
+        page = render_page('t', '/tmp/app', 'basic', None).decode()
+        self.assertNotIn('javascript:', page)
 
     def test_curated_data_and_beginner_html(self):
         self.assertTrue(bundled_data('incidents.json')['incidents'])

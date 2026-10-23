@@ -1,6 +1,6 @@
 ---
 name: defentail-security
-version: 0.2.0
+version: 0.4.0
 description: Use DefenTail during code authoring and before commit to look for vulnerabilities, explain real incident lessons and surface dated mobile-store compliance review tasks. Never represent scanner absence as a pass.
 ---
 
@@ -25,11 +25,14 @@ Use this skill when creating or modifying source, dependencies, authentication, 
 
 ## After coding
 
-1. Run the same configured scanners again and save `defentail-after.json`.
-2. Run `defentail compare defentail-before.json defentail-after.json` to identify changes in findings.
-3. Run relevant functional, authorization and regression tests **in an approved test environment**.
-4. Explain each finding in simple everyday words and supply a short, actionable suggestion.
-5. Report the actual tools that ran, all checks that failed or were unavailable, the last policy/source review date, and remaining risks.
+1. Run `defentail guard --path . --json` and act on its verdict; check `memory` on each
+   finding to see whether it is recurring. `BLOCK` means do not report
+   the task as complete; report the blocking findings in everyday words and the next safe step.
+2. Run the same configured scanners again and save `defentail-after.json`.
+3. Run `defentail compare defentail-before.json defentail-after.json` to identify changes in findings.
+4. Run relevant functional, authorization and regression tests **in an approved test environment**.
+5. Explain each finding in simple everyday words and supply a short, actionable suggestion.
+6. Report the actual tools that ran, all checks that failed or were unavailable, the last policy/source review date, and remaining risks.
 
 ## Strict rules
 

@@ -38,6 +38,13 @@ def esc(v: object) -> str:
     return html.escape(str(v), quote=True)
 
 
+def safe_link(url: object) -> str:
+    """Only render absolute http(s) links, even if bundled data or a report is altered."""
+    if isinstance(url, str) and url.startswith(("https://", "http://")):
+        return esc(url)
+    return ""
+
+
 def render_report(report: dict | None) -> str:
     if not report:
         return ""
@@ -94,7 +101,10 @@ def render_page(token: str, workspace: str, profile: str, report: dict | None, m
         "<p>" + esc(p["simple"]) + "</p>"
         "<small>" + esc(p["platform"].upper()) + " · Human review needed · "
         + " · ".join(esc(v) for v in p["evidence"][:2])
-        + "</small><p><a href='" + esc(p["source"]) + "' target='_blank' rel='noopener noreferrer'>Official policy ↗</a></p></div>"
+        + "</small>"
+        + ("<p><a href='" + safe_link(p["source"]) + "' target='_blank' rel='noopener noreferrer'>Official policy ↗</a></p>"
+           if safe_link(p["source"]) else "")
+        + "</div>"
         for p in policies["policies"]
     )
     intel = kev_status()

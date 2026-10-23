@@ -14,10 +14,12 @@ from importlib import resources
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 KEV_MIRROR = "https://raw.githubusercontent.com/cisagov/kev-data/develop/known_exploited_vulnerabilities.json"
 MAX_FEED_BYTES = 16 * 1024 * 1024
+# A redirect may only stay within these official origins.
+TRUSTED_FEED_HOSTS = {"www.cisa.gov", "cisa.gov", "raw.githubusercontent.com"}
 
 
 def bundled_data(name: str) -> dict:
-    if name not in ("incidents.json", "policies.json"):
+    if name not in ("incidents.json", "policies.json", "soc2.json"):
         raise ValueError("Unknown bundled data file")
     data = resources.files("defentail").joinpath("data", name).read_text(encoding="utf-8")
     return json.loads(data)
@@ -76,8 +78,8 @@ def update_kev(timeout: int = 20) -> dict:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as res:
                 final = urllib.parse.urlsplit(res.geturl())
-                if final.scheme != "https":
-                    raise ValueError("Source redirected to non-HTTPS")
+                if final.scheme != "https" or final.hostname not in TRUSTED_FEED_HOSTS:
+                    raise ValueError("Source redirected to an untrusted origin")
                 candidate_raw = res.read(MAX_FEED_BYTES + 1)
             if len(candidate_raw) > MAX_FEED_BYTES:
                 raise ValueError("Catalog exceeded 16 MiB download limit")

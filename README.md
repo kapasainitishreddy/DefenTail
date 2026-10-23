@@ -4,7 +4,7 @@
 
 > Learn from real attacks. Catch preventable mistakes while coding. Understand security in plain language. Verify what was tested before launch.
 
-**Status: 0.2.0 experimental working starter, NOT an audited security product or a certified compliance service.**
+**Status: 0.4.0 experimental working starter, NOT an audited security product or a certified compliance service.**
 
 DefenTail is an original MIT-licensed Python orchestrator and teaching interface. It does **not bundle third-party binaries, Semgrep community rules, proprietary AI models, account credentials or copyrighted incident articles**. Optional tools must be separately installed in accordance with their own licenses and notices.
 
@@ -40,7 +40,7 @@ This is the **product vision**, not a claim that every item is already implement
 | **Verified fixes and release records** | A green result refers to specific completed checks, never a claim that an app is unhackable |
 | **Open foundation and commercial clarity** | Free, local-first features without lock-in; optional future paid collaboration and managed workflows |
 
-**Plugin reality check:** Today, DefenTail includes a CLI, local file watcher, experimental MCP interface, and reusable agent instructions. A published one-click ChatGPT, Codex, Cursor, Antigravity or IDE extension **does not exist yet**. Those are upcoming product milestones. See [integration status](INTEGRATIONS.md).
+**Plugin reality check:** `defentail install` writes working plugin entries for Claude Code, Cursor, Windsurf, Gemini CLI, Codex CLI and VS Code, plus readable instructions for any other model. What does **not** exist yet: a published marketplace or IDE extension, inline editor diagnostics, and end-to-end testing against every client version. See [integration status](INTEGRATIONS.md).
 
 ## Fastest way to try it (Windows)
 
@@ -67,6 +67,11 @@ With the CLI installed:
 defentail doctor
 defentail scan --path ./my-app --profile basic
 defentail watch --path ./my-app
+defentail guard --path ./my-app
+defentail memory --path ./my-app
+defentail soc2 --path ./my-app --output evidence/soc2.json
+defentail install --path ./my-app
+defentail agents
 defentail lessons
 defentail policies --platform android
 defentail policies --platform ios
@@ -83,6 +88,94 @@ defentail compare before.json after.json
 
 Note: the scan command exits `2` when requested scanner coverage is missing, a scanner fails, or a critical/high/untriaged vulnerability is reported. It exits `0` only when its **selected checks** complete with no configured blockers. That does **not** mean the app is secure. The basic profile performs narrowly scoped heuristic checks; even a basic PASS is not a security pass.
 
+## One command, every AI model (the plugin)
+
+```bash
+defentail install --path .
+```
+
+One command registers DefenTail with whichever AI agents it finds on this computer,
+and adds project files for the ones it cannot detect. Restart or reload the agent
+afterwards, then ask it to call `defentail_guard` before finishing a change.
+
+MCP clients also need the SDK: `python -m pip install "syrava-defentail[mcp]"`. If it is
+missing the installer says so instead of writing configs that cannot start.
+
+| Agent | What the installer writes |
+| --- | --- |
+| Claude Code / Claude Desktop | `~/.claude.json` entry under `mcpServers` |
+| Cursor | `~/.cursor/mcp.json` plus an auto-applied rule at `.cursor/rules/defentail.mdc` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Codex CLI | `~/.codex/config.toml` section `[mcp_servers.defentail]` |
+| VS Code (agent mode) | `.vscode/mcp.json` with a `stdio` server entry |
+| Claude Code project scope | `.mcp.json` in the project |
+| Any other model | `.defentail/AGENT_RULES.md`, plain instructions any agent can read |
+
+`defentail agents` shows what was detected before anything is written. `--dry-run`
+shows the plan without touching a file, `--target cursor,codex` limits it, and
+`--no-project-files` keeps everything out of the repository.
+
+### The prompt that makes a plugin real: `guard`
+
+A plugin is only useful if the model actually checks its own work. `guard` returns a
+short verdict an agent can act on without flooding its context:
+
+```bash
+defentail guard --path . --json
+```
+
+It answers three questions: may this change ship, what is blocking it in plain words,
+and which checks never ran. `BLOCK` also exits `2`, so even a model that only knows
+how to run a shell command can be stopped by it. The same thing is available to MCP
+clients as the `defentail_guard` tool.
+
+**Honest limits:** these are real configuration entries for real clients, but they
+have been verified locally, not against every client version. There is still no
+marketplace extension, no inline editor diagnostics, and no ChatGPT plugin listing.
+The installer only adds or removes its own entries: it backs up any user config it
+edits (`*.defentail-backup`), refuses to overwrite a config it cannot parse, and
+leaves unrelated keys untouched. `defentail uninstall --path .` reverses it.
+
+## Attack Memory: the project remembers
+
+Every `guard` run (and every CLI scan) appends one line to `.defentail/memory.jsonl`
+inside the project. No account, no cloud, no secrets: rule ids, relative paths,
+severity and fingerprints only.
+
+```bash
+defentail memory --path .
+```
+
+It answers what a single scan cannot: has this exact issue been seen before, how many
+times, and did it come back after looking fixed? The guard carries the same history per
+finding (`memory: {times_seen, first_seen, reappeared}`), so an agent can say "this is
+the third time" instead of rediscovering it cold.
+
+A file, not a database, on purpose: it reviews like code in a pull request, survives a
+fresh clone, works offline, and deleting it costs you history and nothing else.
+Cross-project correlation is not implemented, and this is not a tamper-proof audit log.
+
+## SOC 2 technical evidence
+
+```bash
+defentail soc2 --path . --output evidence/soc2.json
+```
+
+Maps what actually ran to ten SOC 2 Trust Services Criteria (CC2.1, CC3.2, CC4.1,
+CC6.1, CC6.7, CC7.1, CC7.2, CC8.1, A1.2, P1.1) and reports four honest statuses:
+
+| Status | What it means |
+| --- | --- |
+| `technical-evidence-collected` | The required checks ran and found nothing for that criterion |
+| `partial` | A required scanner did not run |
+| `finding-observed` | A matching finding is open and listed |
+| `human-evidence-required` | Outside what any code scanner can see |
+
+Every criterion states the human evidence an auditor would still ask for, and the pack
+carries the same coverage record as a scan. **This is technical evidence, not a SOC 2
+report or an audit opinion** — the attestation belongs to a licensed CPA firm.
+
 ## What works today
 
 | Area | v0.2 implementation | Limits |
@@ -95,6 +188,10 @@ Note: the scan command exits `2` when requested scanner coverage is missing, a s
 | Attack memory | Sourced, versioned lessons: Next.js auth bypass, React RSC RCE, npm Shai-Hulud compromise | Three initial lessons, not all security incidents |
 | Threat feed | Explicit CISA Known Exploited Vulnerabilities downloader and local cache | The feed identifies known-exploited CVEs; it is not automatically transformed into new scanning rules |
 | Compliance | Dated Apple, Google Play and OWASP checklists with official links; opt-in content-change notifications | Manual evidence review required. Not certification, legal advice or store approval guarantee |
+| Plugin installer | `defentail install` writes MCP entries for Claude Code, Cursor, Windsurf, Gemini CLI, Codex CLI and VS Code, plus rule files for other models | Config formats follow each vendor's documented shape; verified locally, no marketplace extension |
+| Agent guard | `defentail guard` and the `defentail_guard` MCP tool return a short BLOCK/PASS verdict with plain-language reasons and exit code 2 | Covers only the checks that ran; the basic profile is deliberately narrow |
+| Attack Memory | `.defentail/memory.jsonl` records scans and decisions; recurrence and reappearance are reported per finding | Project-local only; not tamper-proof, and cross-project correlation is not built |
+| SOC 2 evidence | `defentail soc2` maps coverage and findings to ten Trust Services Criteria with explicit gaps | Technical evidence only; organizational controls are out of scope |
 | Proof | JSON evidence digest; reports omit raw secret matches; before/after diff; missing scans block gates | Digest detects casual tampering only, NOT a digital signature; removal from a scan isn't proof the issue is fixed |
 
 ## How the levels work
@@ -185,6 +282,8 @@ $env:PYTHONPATH = "src"; python -m defentail doctor
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit safe rule changes and [INTEGRATIONS.md](INTEGRATIONS.md) for the plugin maturity matrix.
 
 ## Security boundaries and honesty
+
+A deep review of this codebase, including the defects it found and the risks accepted on purpose, is in [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
 
 - Scan only projects you own or are permitted to audit.
 - DefenTail itself doesn't execute scanned project scripts, invoke untrusted MCP servers, install packages, rotate tokens, or automatically deploy fixes.
