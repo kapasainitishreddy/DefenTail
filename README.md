@@ -1,12 +1,46 @@
 # Syrava DefenTail
 
-**A friendly, local-first guardian for AI-generated apps.**
+**Your security companion while you build with AI.**
 
-> Learn from real breaches. Spot preventable mistakes while coding. Explain risks to anyone. Keep a dated trail of what was tested and what still needs human review.
+> Learn from real attacks. Catch preventable mistakes while coding. Understand security in plain language. Verify what was tested before launch.
 
 **Status: 0.2.0 experimental working starter, NOT an audited security product or a certified compliance service.**
 
 DefenTail is an original MIT-licensed Python orchestrator and teaching interface. It does **not bundle third-party binaries, Semgrep community rules, proprietary AI models, account credentials or copyrighted incident articles**. Optional tools must be separately installed in accordance with their own licenses and notices.
+
+## The idea behind DefenTail
+
+I want to build a **security plugin that stays beside the developer and the AI coding agent**, not another scanner that someone remembers to open after an app is finished.
+
+AI tools help people build software faster than ever. But building an app and building a safe app are different things. Security knowledge is scattered across vulnerability scanners, incident reports, coding tools, dependency databases, compliance policies, and app-store checklists. A noncoder should not need to become a cybersecurity expert just to understand whether their app has an avoidable mistake.
+
+**This is the idea I want DefenTail to bring to life:**
+
+- **Protect while coding.** Work as an MCP tool, an agent skill, an editor companion, and eventually a one-click plugin for Codex, Cursor, Antigravity, Claude Code, VS Code, and similar environments.
+- **Learn from real hacks.** Turn *verified* breaches, vulnerabilities, and supply-chain incidents into clear lessons and *human-reviewed* detection rules with repeatable tests. Never run instructions copied from news or untrusted feeds.
+- **Combine the right open-source tools.** Reuse reliable scanners where their licenses permit commercial use, and build original solutions for the gaps between them: correlation, coverage, permissions, explanation, fix verification, and developer experience.
+- **Explain it so anyone understands.** Even someone new to computers or a curious child should understand what might go wrong, why it matters, and the next safe action. Keep the precise technical evidence for experts too.
+- **Make compliance approachable.** Connect code findings to relevant Apple App Store, Google Play, privacy, and security requirements, with dates, official sources, and transparent human-review steps. A checklist never equals certification.
+- **Don't just say “fixed.” Prove what happened.** Track before/after findings, run the appropriate regression tests, reveal scanner failures, and keep honest release evidence.
+- **Make integration easy and privacy-first.** Start locally without registration or paid API keys. Add scanning to existing projects without changing the developer's entire workflow.
+- **Use commercially compatible open source.** Keep an MIT-licensed original core, integrate other tools in ways that respect their real license and distribution rules, and avoid proprietary dependencies in the free foundation.
+
+**I do not want DefenTail to be another dashboard full of warnings. I want it to be the friendly security habit built into the act of creating software.**
+
+This is the **product vision**, not a claim that every item is already implemented in v0.2.
+
+### What will make it worth using?
+
+| Selling point | What makes it useful |
+| --- | --- |
+| **Incident → Guardrail → Test** | Prevent repeat mistakes with trusted, reviewable, test-backed security lessons |
+| **One consistent security layer** | Different tools report into a clear, honest picture of what ran and what did not |
+| **Beginner and expert views** | Simple explanations without hiding security details or real evidence |
+| **Context-aware AI coding checks** | Check the affected code and dependency changes at the right time, with future native integrations |
+| **Verified fixes and release records** | A green result refers to specific completed checks, never a claim that an app is unhackable |
+| **Open foundation and commercial clarity** | Free, local-first features without lock-in; optional future paid collaboration and managed workflows |
+
+**Plugin reality check:** Today, DefenTail includes a CLI, local file watcher, experimental MCP interface, and reusable agent instructions. A published one-click ChatGPT, Codex, Cursor, Antigravity or IDE extension **does not exist yet**. Those are upcoming product milestones. See [integration status](INTEGRATIONS.md).
 
 ## Fastest way to try it (Windows)
 
@@ -147,6 +181,8 @@ PYTHONPATH=src python -m defentail doctor
 # Windows PowerShell
 $env:PYTHONPATH = "src"; python -m defentail doctor
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit safe rule changes and [INTEGRATIONS.md](INTEGRATIONS.md) for the plugin maturity matrix.
 
 ## Security boundaries and honesty
 
